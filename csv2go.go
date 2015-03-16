@@ -19,16 +19,43 @@ type Account struct {
 }
 
 type Decoder struct {
-	csv.Reader
-	fd *os.File
+	reader     *csv.Reader
+	header     csvHeader
+	lastRecord []string
+	trim       string
+	csvReader  io.ReadCloser
+	bHandler   funcBoolean
 }
 
+type funcBoolean func(string) bool
+
+// setBooleanHandler custom boolean handler for fields
+func (d *Decoder) setBooleanHandler(f funcBoolean) {
+	d.bHandler = f
+}
+
+// DoBoolean return boolean of this field
+func (d *Decoder) DoBoolean(field string) bool {
+	if d.bHandler != nil {
+		return d.bHandler()
+	}
+	if len(field) > 0 {
+		return true
+	}
+	return false
+}
+
+// Read() read next record of csv file and take last record
 func (d *Decoder) Read() (record []string, err error) {
-	return d.Reader.Read()
+	d.lastRecord, err = d.reader.Read()
+	return d.lastRecord, err
 }
 
-func (d *Decoder) Close() {
-	d.fd.Close()
+func (d *Decoder) Close() error {
+	if d.csvReader != nil {
+		return d.csvReader.Close()
+	}
+	return nil
 }
 
 func (d *Decoder) decode(i interface{}) {
