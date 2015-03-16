@@ -4,6 +4,8 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"reflect"
+	"strings"
 )
 
 type Decoder struct {
@@ -13,10 +15,14 @@ type Decoder struct {
 	trim       string
 	csvReader  io.ReadCloser
 	bHandler   funcBoolean
+	records    int
 }
 
-type csvHeader map[int]string
+type csvHeader map[string]string
+
 type funcBoolean func(string) bool
+
+var origHeader map[string]int
 
 // Comma set record delimiter, default is ','
 func (d *Decoder) Comma(s rune) *Decoder {
@@ -86,23 +92,62 @@ func (d *Decoder) Close() error {
 
 func (d *Decoder) Decode(i interface{}) error {
 	var err error
-	for {
-		record, err := d.Read()
-		if err == io.EOF {
-			fmt.Println("Read out of file")
-			break
-		} else if err != nil {
-			return err
-		}
-		for i, field := range record {
-			fmt.Println(i, field)
-		}
+	record, err := d.Read()
+	if err == io.EOF {
+		fmt.Println("Read out of file")
+		return err
+	} else if err != nil {
+		return err
+	}
+	if d.records == 0 {
+		initHeader(record)
+		initCsvHeader(i)
+	}
+	// for i, field := range record {
+	// 	fmt.Println(i, field)
+	// }
+	d.records += 1
+	return err
+}
+
+// skip filed of struct contains '-'
+func skip(tag reflect.StructTag) bool {
+	return strings.HasPrefix(field(tag), "-")
+}
+
+func field(tag reflect.StructTag) string {
+	return tag.Get("csv")
+}
+
+func initCsvHeader(i interface{}) error {
+	var err error
+	t := reflect.TypeOf(i)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		fmt.Println("kind of i:", t.Kind())
+		return err
+	}
+	for i := 0; i < t.NumField(); i++ {
+		fmt.Println(t.Field(i))
 	}
 	return err
+}
+
+func initHeader(r []string) {
+	if origHeader == nil {
+		origHeader = make(map[string]int)
+	}
+	for i, field := range r {
+		origHeader[field] = i
+	}
+	fmt.Println("CSV Header:", origHeader)
 }
 
 func NewDecoder(in io.ReadCloser) *Decoder {
 	decoder := &Decoder{reader: csv.NewReader(in)}
 	decoder.csvReader = in
+	decoder.records = 0
 	return decoder
 }
