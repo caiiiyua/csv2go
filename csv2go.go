@@ -18,6 +18,10 @@ type Decoder struct {
 	csvReader  io.ReadCloser
 	bHandler   funcBoolean
 	records    int
+
+	origHeader  Header
+	cols        map[int]string
+	headerCache map[string]structField
 }
 
 type csvHeader map[string]string
@@ -25,11 +29,11 @@ type Header map[string]int
 
 type funcBoolean func(string) bool
 
-var header csvHeader
-var origHeader Header
-var cols map[int]string
+// var header csvHeader
+// var origHeader Header
+// var cols map[int]string
 
-var headerCache map[string]structField
+// var headerCache map[string]structField
 
 type structField reflect.StructField
 
@@ -101,7 +105,7 @@ func (d *Decoder) Close() error {
 
 // return column value according col name
 func (d *Decoder) colByName(col string) string {
-	idx := origHeader[col]
+	idx := d.origHeader[col]
 	return d.lastRecord[idx]
 
 }
@@ -122,7 +126,7 @@ func (d *Decoder) structParser(name string, v string) interface{} {
 func (d *Decoder) setValue(v reflect.Value, field, vstr string) error {
 	var err error
 	f := v.FieldByName(field)
-	typ := headerCache[field]
+	typ := d.headerCache[field]
 	// fmt.Println(field, typ.Type, typ.Type.Kind(), typ.Name)
 	if f.CanSet() {
 		// fmt.Println(field, typ.Type)
@@ -177,9 +181,8 @@ func (d *Decoder) Decode(i interface{}) error {
 		return err
 	}
 	if d.records == 0 {
-		initHeader(record)
-		initCsvHeader(i)
-		d.header = header
+		d.initHeader(record)
+		d.initCsvHeader(i)
 		fmt.Println(d.header)
 	} else {
 		value := reflect.ValueOf(i).Elem()
@@ -205,7 +208,7 @@ func field(tag reflect.StructTag) string {
 	return tag.Get("csv")
 }
 
-func initCsvHeader(i interface{}) error {
+func (d *Decoder) initCsvHeader(i interface{}) error {
 	var err error
 	t := reflect.TypeOf(i)
 	if t.Kind() == reflect.Ptr {
@@ -218,37 +221,38 @@ func initCsvHeader(i interface{}) error {
 	j := 0
 	custome := false
 	for i := 0; i < t.NumField(); i++ {
-		headerCache[t.Field(i).Name] = structField(t.Field(i))
+		d.headerCache[t.Field(i).Name] = structField(t.Field(i))
 		// fmt.Println(t.Field(i))
 		// skip any field unexpected
 		if skip(t.Field(i).Tag) {
 			continue
 		} else if len(field(t.Field(i).Tag)) > 0 {
 			if !custome {
-				for k := range header {
-					delete(header, k)
+				for k := range d.header {
+					delete(d.header, k)
 				}
 				custome = true
 			}
-			header[t.Field(i).Name] = field((t.Field(i).Tag))
+			d.header[t.Field(i).Name] = field((t.Field(i).Tag))
 
 		} else {
-			header[t.Field(i).Name] = t.Field(i).Name
+			d.header[t.Field(i).Name] = t.Field(i).Name
 		}
 		j += 1
 	}
 	return err
 }
 
-func initHeader(r []string) {
-	if origHeader == nil {
-		origHeader = make(Header)
+func (d *Decoder) initHeader(r []string) *Decoder {
+	if d.origHeader == nil {
+		d.origHeader = make(Header)
 	}
 	for i, field := range r {
-		origHeader[field] = i
-		cols[i] = field
+		d.origHeader[field] = i
+		d.cols[i] = field
 	}
-	fmt.Println("CSV Header:", origHeader)
+	fmt.Println("CSV Header:", d.origHeader)
+	return d
 }
 
 // NewDecoder get a Decoder for use
@@ -256,12 +260,16 @@ func NewDecoder(in io.ReadCloser) *Decoder {
 	decoder := &Decoder{reader: csv.NewReader(in)}
 	decoder.csvReader = in
 	decoder.records = 0
+	decoder.origHeader = make(Header)
+	decoder.header = make(csvHeader)
+	decoder.cols = make(map[int]string)
+	decoder.headerCache = make(map[string]structField)
 	return decoder
 }
 
 func init() {
-	origHeader = make(Header)
-	header = make(csvHeader)
-	cols = make(map[int]string)
-	headerCache = make(map[string]structField)
+	// origHeader = make(Header)
+	// header = make(csvHeader)
+	// cols = make(map[int]string)
+	// headerCache = make(map[string]structField)
 }
