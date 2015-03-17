@@ -22,7 +22,8 @@ type csvHeader map[string]string
 
 type funcBoolean func(string) bool
 
-var origHeader map[string]int
+var header csvHeader
+var origHeader map[int]string
 
 // Comma set record delimiter, default is ','
 func (d *Decoder) Comma(s rune) *Decoder {
@@ -131,16 +132,18 @@ func initCsvHeader(i interface{}) error {
 	}
 	for i := 0; i < t.NumField(); i++ {
 		fmt.Println(t.Field(i))
+		header[t.Field(i).Name] = origHeader[i]
 	}
+	fmt.Println(header)
 	return err
 }
 
 func initHeader(r []string) {
 	if origHeader == nil {
-		origHeader = make(map[string]int)
+		origHeader = make(map[int]string)
 	}
 	for i, field := range r {
-		origHeader[field] = i
+		origHeader[i] = field
 	}
 	fmt.Println("CSV Header:", origHeader)
 }
@@ -150,4 +153,10 @@ func NewDecoder(in io.ReadCloser) *Decoder {
 	decoder.csvReader = in
 	decoder.records = 0
 	return decoder
+}
+
+func init() {
+	origHeader = make(map[int]string)
+	header = make(csvHeader)
+
 }
